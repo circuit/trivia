@@ -1,6 +1,6 @@
 # Trivia
 
-A trivia game for Circuit written with Google Cloud Functions, Google Cloud Datastore, DialogFlow and the Circuit REST API.
+A trivia game for Circuit written with [Google Cloud Functions](https://cloud.google.com/functions/docs/), [Google Cloud Datastore](https://cloud.google.com/datastore/docs/), [DialogFlow](https://dialogflow.com/docs) and the [Circuit REST API](https://circuitsandbox.net/rest/v2/swagger/ui/index.html).
 
 ## Usage
 On a Circuit conversation where the bot is a member, any participant can ask the bot to post a new trivia question, list the categories, show the stats and more.
