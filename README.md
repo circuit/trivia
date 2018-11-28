@@ -10,14 +10,14 @@ For example: <i>@Trivia Bot ask an easy question in sports</i>
 Any participant can attempt to answer the posted question. After 15 seconds the correct answer and the winners are shown.
 
 ### Screenshots
-<kbd><img src="images/question.png" width="300px"></kbd>
-<kbd><img src="images/question2.png" width="300px"></kbd>
-<kbd><img src="images/answer.png" width="300px"></kbd>
-<kbd><img src="images/stats.png" width="300px"></kbd>
-<kbd><img src="images/categories.png" width="300px"></kbd>
+<kbd><img src="images/question.png" width="425px"></kbd>
+<kbd><img src="images/question2.png" width="425px"></kbd>
+<kbd><img src="images/answer.png" width="425px"></kbd>
+<kbd><img src="images/stats.png" width="425px"></kbd>
+<kbd><img src="images/categories.png" width="425px"></kbd>
 
 ## Technical Overview
-The cloud functions <b>start</b> and <b>stop</b> are used to register/unregister the Circuit webhooks <b>CONVERSATION.ADD_ITEM</b> and <b>USER.SUBMIT_FORM_DATA</b> via the Circuit REST API.
+The cloud functions <b>start</b> and <b>stop</b> are used to register/unregister the Circuit webhooks <code>CONVERSATION.ADD_ITEM</code> and <code>USER.SUBMIT_FORM_DATA</code> via the Circuit REST API.
 
 The cloud function <b>addTextItem</b> is called whenever a text item is posted in a conversation the bot is a member of. This function checks if the bot is mentioned, and if so passes the text content (utterance) to DialogFlow via the [DialogFlow SDK](https://dialogflow.com/docs/sdks). The official [DialogFlow Node.js Client](https://www.npmjs.com/package/dialogflow) is used.
 
