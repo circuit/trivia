@@ -5,18 +5,16 @@
 'use strict';
 
 const fetch = require('node-fetch');
-const utils = require('../utils');
-const config = require('../config');
-const db = require('../db');
+const db = require('./shared/db');
 
 // Circuit domain
-const domain = config.domain
+const { DOMAIN } = process.env;
 
 // Circuit token
 let token, userId;
 
 // Initialize the DB with the right domain
-db.init(domain);
+db.init(DOMAIN);
 
 /**
  * Cloud function entry point called by the Circuit server
@@ -68,7 +66,7 @@ exports.submitFormData = async (req, res) => {
 
 async function incrementSubmissionCount(itemId) {
   // Lookup item in Circuit so it can be updated
-  let url = `${domain}/rest/conversations/messages/${itemId}`;
+  let url = `${DOMAIN}/rest/conversations/messages/${itemId}`;
 
   let item = await fetch(url, {
     method: 'GET',
@@ -80,7 +78,7 @@ async function incrementSubmissionCount(itemId) {
   const form = JSON.parse(item.text.formMetaData);
   form.controls[3].text = parseInt(form.controls[3].text) + 1 + ' submission(s)';
 
-  url = `${domain}/rest/conversations/${item.convId}/messages/${itemId}`;
+  url = `${DOMAIN}/rest/conversations/${item.convId}/messages/${itemId}`;
   await fetch(url, {
     method: 'PUT',
     headers: { 'Authorization': 'Bearer ' + token },

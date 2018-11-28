@@ -2,9 +2,18 @@
   "name": "trivia",
   "version": "0.0.1",
   "description": "A trivia game for Circuit written with Google Cloud Functions, Google Cloud Datastore, DialogFlow and the Circuit REST API.",
-  "keywords": ["Circuit", "Google Cloud Functions", "DialogFlow", "Trivia", "Game"],
+  "keywords": [
+    "Circuit",
+    "Google Cloud Functions",
+    "DialogFlow",
+    "Trivia",
+    "Game"
+  ],
   "author": "Roger Urscheler <roger.urscheler@atos.net>",
-  "license": "ISC",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=8"
+  },
   "dependencies": {
     "@google-cloud/datastore": "^2.0.0",
     "dialogflow": "^0.7.0",

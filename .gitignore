@@ -16,4 +16,5 @@ logs/*
 config.json
 WEB-INF
 env.yaml
+.env.yaml
 credentials.txt

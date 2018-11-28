@@ -8,22 +8,21 @@
 'use strict';
 
 const fetch = require('node-fetch');
-const utils = require('../utils');
-const config = require('../config');
-const structjson = require('../structjson');
-const dialogFlow = require('./dialogFlow');
-const db = require('../db');
+const htmlToText = require('html-to-text');
+const structjson = require('./shared/structjson');
+const dialogFlow = require('./shared/dialogFlow');
+const db = require('./shared/db');
 
-const ANSWER_TIME = 10; // in seconds
+const ANSWER_TIME = 15; // in seconds
 
 // Circuit domain
-const domain = config.domain
+const { DOMAIN } = process.env;
 
 // Circuit token and bot userId
 let token, userId;
 
 // Initialize the DB with the right domain
-db.init(domain);
+db.init(DOMAIN);
 
 // Intents for DialogFlow
 const Intents = {
@@ -31,6 +30,56 @@ const Intents = {
   LIST_CATEGORIES: 'List categories',
   SHOW_STATS: 'Show stats',
   HELP: 'Help'
+}
+
+/**
+ * Shuffle an array
+ * @param {Array} a
+ */
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/**
+ * Timer
+ * @param {Number} ms Duration
+ */
+function timeout(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function createMentionedUsersArray(msg) {
+  var mentionedUsers = [];
+  // We cannot guarantee the order of the attributes within the span, so we need
+  // to split the patterns.
+  var mentionPattern = /<span.*?class=["']mention["'].*?>/g;
+  var abbrPattern = /abbr=["'](.*?)["']/;
+  var match = mentionPattern.exec(msg);
+
+  while (match !== null) {
+      var abbr = abbrPattern.exec(match[0]);
+      abbr = abbr && abbr[1];
+      if (mentionedUsers.indexOf(abbr) === -1) {
+          mentionedUsers.push(abbr);
+      }
+      match = mentionPattern.exec(msg);
+  }
+
+  return mentionedUsers;
+};
+
+function getMentionedContent(content, userId) {
+  const userIds = createMentionedUsersArray(content);
+  if (userIds.includes(userId)) {
+    // Remove mentions (spans)
+    content = content.replace(/<span[^>]*>([^<]+)<\/span>/g, '');
+    // Remove html if any in the question and trim result
+    return htmlToText.fromString(content).trim();
+  }
 }
 
 /**
@@ -93,7 +142,7 @@ async function postNewQuestion(convId, parentItemId, agentParams) {
   }
 
   const choices = [res.correct_answer].concat(res.incorrect_answers);
-  utils.shuffle(choices);
+  shuffle(choices);
   choices.forEach(choice => {
     form.controls[1].options.push({
       text: choice,
@@ -104,7 +153,7 @@ async function postNewQuestion(convId, parentItemId, agentParams) {
   let content = `Here is ${res.difficulty === 'easy' ? 'an <b>easy</b>' : 'a <b>' + res.difficulty + '</b>'} question of category <b>${res.category}</b>.<br>`;
   content += `You have ${ANSWER_TIME} seconds to answer.`;
 
-  url = `${domain}/rest/conversations/${convId}/messages`;
+  url = `${DOMAIN}/rest/conversations/${convId}/messages`;
   parentItemId && (url += `/${parentItemId}`);
 
   let item = await fetch(url, {
@@ -123,13 +172,13 @@ async function postNewQuestion(convId, parentItemId, agentParams) {
   await db.addQuestion(res);
 
   // Wait some time
-  await utils.timeout(ANSWER_TIME * 1000);
+  await timeout(ANSWER_TIME * 1000);
 
   // Mark question as expired
   await db.expireQuestion(item.itemId);
 
   // Wait 1 more second to make sure question is not updated by submitDataForm
-  await utils.timeout(1000);
+  await timeout(1000);
 
   // Get users with correct answer from DB in order of submission timestamp
   const submissions = await db.getSubmissionsByItemId(item.itemId);
@@ -143,7 +192,7 @@ async function postNewQuestion(convId, parentItemId, agentParams) {
 
   if (winners.length) {
     // Get their names
-    url = `${domain}/rest/users/list?name=${winners.join(',')}`;
+    url = `${DOMAIN}/rest/users/list?name=${winners.join(',')}`;
 
     let users = await fetch(url, {
       method: 'GET',
@@ -178,7 +227,7 @@ async function postNewQuestion(convId, parentItemId, agentParams) {
   }
 
   // Post result
-  url = `${domain}/rest/conversations/${convId}/messages/${item.itemId}`;
+  url = `${DOMAIN}/rest/conversations/${convId}/messages/${item.itemId}`;
   await fetch(url, {
     method: 'PUT',
     headers: { 'Authorization': 'Bearer ' + token },
@@ -200,7 +249,7 @@ async function showStats(convId, parentItemId) {
   const stats = await db.getStats();
 
   const userIds = Object.keys(stats.users);
-  let url = `${domain}/rest/users/list?name=${userIds.join(',')}`;
+  let url = `${DOMAIN}/rest/users/list?name=${userIds.join(',')}`;
   let users = await fetch(url, {
     method: 'GET',
     headers: { 'Authorization': 'Bearer ' + token }
@@ -221,7 +270,7 @@ async function showStats(convId, parentItemId) {
     content += '</ol>';
   }
 
-  url = `${domain}/rest/conversations/${convId}/messages`;
+  url = `${DOMAIN}/rest/conversations/${convId}/messages`;
   parentItemId && (url += `/${parentItemId}`);
 
   await fetch(url, {
@@ -241,7 +290,7 @@ async function showStats(convId, parentItemId) {
 async function postMessage(convId, parentItemId, content) {
   console.log(`listCategories, convId=${convId}, parentItemId=${parentItemId}`);
 
-  let url = `${domain}/rest/conversations/${convId}/messages`;
+  let url = `${DOMAIN}/rest/conversations/${convId}/messages`;
   parentItemId && (url += `/${parentItemId}`);
 
   await fetch(url, {
@@ -278,7 +327,7 @@ exports.addTextItem = async (req, res) => {
     return;
   }
 
-  const msg = utils.getMentionedContent(item.text.content, userId);
+  const msg = getMentionedContent(item.text.content, userId);
   if (!msg) {
     // User is not mentioned, skip it. Once the new API is available to
     // only get the event when being mentioned, this will not be needed

@@ -5,11 +5,11 @@
 'use strict';
 
 const fetch = require('node-fetch');
-const db = require('../db');
-const { domain } = require('../config');
+const db = require('./shared/db');
+const { DOMAIN } = process.env;
 
 // Initialize the DB with the right domain
-db.init(domain);
+db.init(DOMAIN);
 
 exports.stop = async (req, res) => {
   try {
@@ -21,7 +21,7 @@ exports.stop = async (req, res) => {
     }
 
     // Delete previous webhooks
-    await fetch(`${domain}/rest/webhooks`, {
+    await fetch(`${DOMAIN}/rest/webhooks`, {
       method: 'DELETE',
       headers: { 'Authorization': 'Bearer ' + token }
     });

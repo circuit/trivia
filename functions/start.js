@@ -5,24 +5,23 @@
 
 'use strict';
 
-
 const fetch = require('node-fetch');
 const simpleOauth2 = require('simple-oauth2');
-const db = require('../db');
-const { domain, clientId, clientSecret, cloudFnHost } = require('../config');
+const db = require('./shared/db');
+const { DOMAIN, CLIENT_ID, CLIENT_SECRET, CLOUD_FN_HOST } = process.env;
 
 // Initialize the DB with the right domain
-db.init(domain);
+db.init(DOMAIN);
 
 async function authenticate () {
   try {
     const oauth2 = simpleOauth2.create({
       client: {
-        id: clientId,
-        secret: clientSecret
+        id: CLIENT_ID,
+        secret: CLIENT_SECRET
       },
       auth: {
-        tokenHost: domain
+        tokenHost: DOMAIN
       }
     });
 
@@ -30,7 +29,7 @@ async function authenticate () {
     console.log('Circuit Client Credentials Token: ', token);
 
     // Get bot user object
-    let user = await fetch(`${domain}/rest/users/profile`, {
+    let user = await fetch(`${DOMAIN}/rest/users/profile`, {
       method: 'GET',
       headers: { 'Authorization': 'Bearer ' + token.access_token }
     });
@@ -55,28 +54,28 @@ exports.start = async (req, res) => {
     await db.saveToken(userId, token);
 
     // Delete previous webhooks
-    await fetch(`${domain}/rest/webhooks`, {
+    await fetch(`${DOMAIN}/rest/webhooks`, {
       method: 'DELETE',
       headers: { 'Authorization': 'Bearer ' + token }
     });
 
     // Register new webhook for USER.SUBMIT_FORM_DATA
-    let webhookId = await fetch(`${domain}/rest/webhooks`, {
+    let webhookId = await fetch(`${DOMAIN}/rest/webhooks`, {
       method: 'POST',
       headers: {
         'Authorization': 'Bearer ' + token
       },
-      body: `url=${encodeURI(`${cloudFnHost}/submitFormData`)}&filter=USER.SUBMIT_FORM_DATA`
+      body: `url=${encodeURI(`${CLOUD_FN_HOST}/submitFormData`)}&filter=USER.SUBMIT_FORM_DATA`
     });
     console.log(`Webhook ${webhookId} created for USER.SUBMIT_FORM_DATA`);
 
     // Register new webhook for CONVERSATION.ADD_ITEM
-    webhookId = await fetch(`${domain}/rest/webhooks`, {
+    webhookId = await fetch(`${DOMAIN}/rest/webhooks`, {
       method: 'POST',
       headers: {
         'Authorization': 'Bearer ' + token
       },
-      body: `url=${encodeURI(`${cloudFnHost}/addTextItem`)}&filter=CONVERSATION.ADD_ITEM`
+      body: `url=${encodeURI(`${CLOUD_FN_HOST}/addTextItem`)}&filter=CONVERSATION.ADD_ITEM`
     });
     console.log(`Webhook ${webhookId} created for CONVERSATION.ADD_ITEM`);
 
