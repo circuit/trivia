@@ -1,0 +1,12 @@
+indexes:
+
+- kind: submission
+  properties:
+  - name: itemId
+  - name: created
+    direction: desc
+
+- kind: submission
+  properties:
+  - name: correct
+  - name: submitterId
