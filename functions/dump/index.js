@@ -3,7 +3,7 @@ const Datastore = require('@google-cloud/datastore');
 // Instantiates a data store client
 const datastore = Datastore();
 
-exports.datastore = async (req, res) => {
+exports.dump = async (req, res) => {
 
   const ns = req.query.ns || 'trivia';
   const kind = req.query.kind || 'question';

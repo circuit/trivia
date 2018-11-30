@@ -1,17 +1,21 @@
 /**
- * Registers a CONVERSATION.ADD_ITEM and USER.SUBMIT_FORM_DATA webhook
- * with the Circuit REST API which starts up the Trivia Bot.
+ * Cloud Functions to manage the trivia app
+ * start: gets an OAuth token,then registers a CONVERSATION.ADD_ITEM
+ *        and USER.SUBMIT_FORM_DATA webhook with the Circuit REST API
+ *        which starts up the Trivia Bot.
+ * stop:  unregisters the Circuit webhooks
  */
 
 'use strict';
 
 const fetch = require('node-fetch');
 const simpleOauth2 = require('simple-oauth2');
-const db = require('./shared/db');
+const datastore = require('@google-cloud/datastore')();
+
 const { DOMAIN, CLIENT_ID, CLIENT_SECRET, CLOUD_FN_HOST } = process.env;
 
-// Initialize the DB with the right domain
-db.init(DOMAIN);
+// Define datastore namespace based on system
+const ns = 'trivia_' + DOMAIN.split('//')[1];
 
 async function authenticate () {
   try {
@@ -51,7 +55,20 @@ exports.start = async (req, res) => {
     const { userId, token } = await authenticate();
 
     // Save/update token in Cloud Datastore
-    await db.saveToken(userId, token);
+    const key = datastore.key({
+      namespace: ns,
+      path: ['token', DOMAIN]
+    });
+    const entity = {
+      key: key,
+      data: {
+        domain: DOMAIN,
+        userId,
+        token,
+        created:  new Date().toJSON()
+      }
+    }
+    await datastore.upsert(entity);
 
     // Delete previous webhooks
     await fetch(`${DOMAIN}/rest/webhooks`, {
@@ -65,7 +82,7 @@ exports.start = async (req, res) => {
       headers: {
         'Authorization': 'Bearer ' + token
       },
-      body: `url=${encodeURI(`${CLOUD_FN_HOST}/submitFormData`)}&filter=USER.SUBMIT_FORM_DATA`
+      body: `url=${encodeURI(`${CLOUD_FN_HOST}/webhook`)}&filter=USER.SUBMIT_FORM_DATA`
     });
     console.log(`Webhook ${webhookId} created for USER.SUBMIT_FORM_DATA`);
 
@@ -75,7 +92,7 @@ exports.start = async (req, res) => {
       headers: {
         'Authorization': 'Bearer ' + token
       },
-      body: `url=${encodeURI(`${CLOUD_FN_HOST}/addTextItem`)}&filter=CONVERSATION.ADD_ITEM`
+      body: `url=${encodeURI(`${CLOUD_FN_HOST}/webhook`)}&filter=CONVERSATION.ADD_ITEM`
     });
     console.log(`Webhook ${webhookId} created for CONVERSATION.ADD_ITEM`);
 
@@ -86,3 +103,30 @@ exports.start = async (req, res) => {
   }
 };
 
+exports.stop = async (req, res) => {
+  try {
+    const key = datastore.key({
+      namespace: ns,
+      path: ['token', DOMAIN]
+    });
+    const entity = await datastore.get(key);
+
+    if (!entity.length) {
+      console.error('No token available to stop webhooks. Run start first to get a token again.');
+      return;
+    }
+    const token = entity[0].token;
+
+    // Delete previous webhooks
+    await fetch(`${DOMAIN}/rest/webhooks`, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+
+    console.info('Webhooks deleted');
+    res.sendStatus(200);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err && err.message);
+  }
+};

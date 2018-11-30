@@ -90,7 +90,7 @@ async function addQuestion(data) {
   };
 
   await datastore.save(entity);
-  console.log(`Question ${key.id} added to Datastore`);
+  console.log(`Question for item ${data.itemId} added to Datastore`);
 }
 
 async function getQuestion(itemId) {

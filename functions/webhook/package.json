@@ -1,5 +1,5 @@
 {
-  "name": "trivia",
+  "name": "trivia-webhook-function",
   "version": "0.0.1",
   "description": "A trivia game for Circuit written with Google Cloud Functions, Google Cloud Datastore, DialogFlow and the Circuit REST API.",
   "keywords": [
@@ -18,7 +18,6 @@
     "@google-cloud/datastore": "^2.0.0",
     "dialogflow": "^0.7.0",
     "html-to-text": "^4.0.0",
-    "node-fetch": "^2.2.1",
-    "simple-oauth2": "^2.2.1"
+    "node-fetch": "^2.2.1"
   }
 }

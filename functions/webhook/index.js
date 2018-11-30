@@ -1,19 +1,22 @@
 /**
- * Webhook for Circuit CONVERSATION.ADD_ITEM event.
- * If mentioned, pass utterance to DialogFlow for evaluation,
- * and if matching an intent, then perform the action to be
- * taken.
+ * Single webhook cloud function that is invoked by Circuit webhooks
+ * CONVERSATION.ADD_ITEM and USER.SUBMIT_FORM_DATA.
+ * CONVERSATION.ADD_ITEM is invoked for any new Circuit message
+ * USER.SUBMIT_FORM_DATA is triggered when a user sibmits an answer
+ *
+ * Done as a single cloud function to reduce the cold start time for
+ * submitting an answer.
  */
 
 'use strict';
 
 const fetch = require('node-fetch');
-const htmlToText = require('html-to-text');
-const structjson = require('./shared/structjson');
-const dialogFlow = require('./shared/dialogFlow');
-const db = require('./shared/db');
+const structjson = require('./structjson');
+const dialogFlow = require('./dialogFlow');
+const utils = require('./utils');
+const db = require('./db');
 
-const ANSWER_TIME = 15; // in seconds
+const ANSWER_TIME = 20; // in seconds
 
 // Circuit domain
 const { DOMAIN } = process.env;
@@ -29,57 +32,8 @@ const Intents = {
   NEW_QUESTION: 'New question',
   LIST_CATEGORIES: 'List categories',
   SHOW_STATS: 'Show stats',
+  ABOUT: 'About',
   HELP: 'Help'
-}
-
-/**
- * Shuffle an array
- * @param {Array} a
- */
-function shuffle(a) {
-  for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-/**
- * Timer
- * @param {Number} ms Duration
- */
-function timeout(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function createMentionedUsersArray(msg) {
-  var mentionedUsers = [];
-  // We cannot guarantee the order of the attributes within the span, so we need
-  // to split the patterns.
-  var mentionPattern = /<span.*?class=["']mention["'].*?>/g;
-  var abbrPattern = /abbr=["'](.*?)["']/;
-  var match = mentionPattern.exec(msg);
-
-  while (match !== null) {
-      var abbr = abbrPattern.exec(match[0]);
-      abbr = abbr && abbr[1];
-      if (mentionedUsers.indexOf(abbr) === -1) {
-          mentionedUsers.push(abbr);
-      }
-      match = mentionPattern.exec(msg);
-  }
-
-  return mentionedUsers;
-};
-
-function getMentionedContent(content, userId) {
-  const userIds = createMentionedUsersArray(content);
-  if (userIds.includes(userId)) {
-    // Remove mentions (spans)
-    content = content.replace(/<span[^>]*>([^<]+)<\/span>/g, '');
-    // Remove html if any in the question and trim result
-    return htmlToText.fromString(content).trim();
-  }
 }
 
 /**
@@ -142,7 +96,7 @@ async function postNewQuestion(convId, parentItemId, agentParams) {
   }
 
   const choices = [res.correct_answer].concat(res.incorrect_answers);
-  shuffle(choices);
+  utils.shuffle(choices);
   choices.forEach(choice => {
     form.controls[1].options.push({
       text: choice,
@@ -172,13 +126,13 @@ async function postNewQuestion(convId, parentItemId, agentParams) {
   await db.addQuestion(res);
 
   // Wait some time
-  await timeout(ANSWER_TIME * 1000);
+  await utils.timeout(ANSWER_TIME * 1000);
 
   // Mark question as expired
   await db.expireQuestion(item.itemId);
 
   // Wait 1 more second to make sure question is not updated by submitDataForm
-  await timeout(1000);
+  await utils.timeout(1000);
 
   // Get users with correct answer from DB in order of submission timestamp
   const submissions = await db.getSubmissionsByItemId(item.itemId);
@@ -300,11 +254,7 @@ async function postMessage(convId, parentItemId, content) {
   });
 }
 
-/**
- * Cloud function entry point called by the Circuit server
- * when a new text item is added
- */
-exports.addTextItem = async (req, res) => {
+async function handleConversationAddItem(req, res) {
   const item = req.body && req.body.item;
   console.log('addTextItem called for item: ', item.itemId);
 
@@ -327,7 +277,7 @@ exports.addTextItem = async (req, res) => {
     return;
   }
 
-  const msg = getMentionedContent(item.text.content, userId);
+  const msg = utils.getMentionedContent(item.text.content, userId);
   if (!msg) {
     // User is not mentioned, skip it. Once the new API is available to
     // only get the event when being mentioned, this will not be needed
@@ -340,7 +290,6 @@ exports.addTextItem = async (req, res) => {
 
     const result = await dialogFlow.detectIntent(msg);
     console.log(`Query: ${result.queryText}`);
-    console.log(`Response: ${result.fulfillmentText}`);
     if (result.intent) {
       console.log(`Intent: ${result.intent.displayName}`);
 
@@ -370,5 +319,88 @@ exports.addTextItem = async (req, res) => {
     await postMessage(item.convId, item.itemId, `Error: ${err && err.message}`);
     res.status(500).send(err && err.message);
   }
-};
+}
+
+async function handleUserSubmitFormData(req, res) {
+  const { formId, itemId, submitterId, data } = req.body.submitFormData;
+
+  if (formId !== 'trivia') {
+    res.status(500).send('Incorrect form');
+    return;
+  }
+
+  console.log(`Form submission by ${submitterId} on item ${itemId}`);
+
+  // Check if question has expired
+  const question = await db.getQuestion(itemId);
+  if (!question || question.status === 'expired') {
+    console.log(`Question has expired. itemId: ${itemId}`);
+    res.status(500).send('Question has expired');
+    return;
+  }
+
+  // Lookup in DB if user has already submitted an answer, if so don't
+  // accept this new submission
+  const alreadySubmitted = await db.getSubmission(itemId, submitterId);
+  if (alreadySubmitted) {
+    console.log(`Ignore multiple submissions. userId: ${submitterId}`);
+    res.status(500).send('Already submitted');
+    return;
+  }
+
+  // Get token and bot userId from Datastore
+  ({token, userId} = await db.getToken());
+
+  const isCorrect = data[0].value === question.correctAnswer;
+
+  // In parallel updating item with submission count and
+  // add new submission to DB
+  await Promise.all([
+    incrementSubmissionCount(itemId),
+    db.addSubmission(itemId, submitterId, data[0].value, isCorrect)
+  ]);
+
+  res.sendStatus(200);
+}
+
+async function incrementSubmissionCount(itemId) {
+  // Lookup item in Circuit so it can be updated
+  let url = `${DOMAIN}/rest/conversations/messages/${itemId}`;
+
+  let item = await fetch(url, {
+    method: 'GET',
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  item = await item.json();
+
+  // Increment submission count
+  const form = JSON.parse(item.text.formMetaData);
+  form.controls[3].text = parseInt(form.controls[3].text) + 1 + ' submission(s)';
+
+  url = `${DOMAIN}/rest/conversations/${item.convId}/messages/${itemId}`;
+  await fetch(url, {
+    method: 'PUT',
+    headers: { 'Authorization': 'Bearer ' + token },
+    body: JSON.stringify({
+      formMetaData: JSON.stringify(form)
+    })
+  });
+}
+
+exports.webhook = async (req, res) => {
+  switch (req.body.type) {
+    case 'CONVERSATION.ADD_ITEM':
+    await handleConversationAddItem(req, res);
+    break;
+    case 'USER.SUBMIT_FORM_DATA':
+    await handleUserSubmitFormData(req, res);
+    break;
+    default:
+    const msg = `Unknown type ${req.body.type}`;
+    console.log(msg);
+    res.status(200).send(msg);
+  }
+}
+
+
 

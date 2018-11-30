@@ -1,0 +1,14 @@
+{
+  "name": "trivia-manage-functions",
+  "version": "0.0.1",
+  "author": "Roger Urscheler <roger.urscheler@atos.net>",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=8"
+  },
+  "dependencies": {
+    "node-fetch": "^2.2.1",
+    "simple-oauth2": "^2.2.1",
+    "@google-cloud/datastore": "^2.0.0"
+  }
+}
