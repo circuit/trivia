@@ -204,7 +204,7 @@ async function getStats() {
 
   for (let id in users) {
     const u = users[id];
-    u.percentage = u.incorrect ? Math.round(100 * u.correct / (u.incorrect + u.correct)) : 1;
+    u.percentage = u.incorrect ? Math.round(100 * u.correct / (u.incorrect + u.correct)) : 100;
   }
 
   q = datastore
