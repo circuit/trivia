@@ -48,9 +48,9 @@ Follow the same steps as in cloud deploy below. If you followed the emulator ins
 * export the env variables, e.g. <code>export DOMAIN=https://circuitsandbox.net</code>
 * <code>functions config set projectId &lt;your project id></code>
 * <code>functions start</code>
-* <code>functions deploy start --runtime nodejs8 --env-vars-file .env.yaml --trigger-http</code>
-* <code>functions deploy stop --runtime nodejs8 --env-vars-file .env.yaml --trigger-http</code>
-* <code>functions deploy webhook --runtime nodejs8 --env-vars-file .env.yaml --trigger-http</code>
+* <code>cd manage;functions deploy start --env-vars-file ../.env.yaml --trigger-http;cd ..</code>
+* <code>cd manage;functions deploy stop --env-vars-file ../.env.yaml --trigger-http;cd ..</code>
+* <code>cd webhook;functions deploy webhook --env-vars-file ../.env.yaml --trigger-http;cd ..</code>
 
 ### Debugging
 Use vscode to debug, but before starting the debugger you need to start the functions emulator debugger via <code>functions inspect webhook</code> for debugging the webhook function.
