@@ -203,12 +203,21 @@ async function showStats(convId, parentItemId) {
   const stats = await db.getStats();
 
   const userIds = Object.keys(stats.users);
-  let url = `${DOMAIN}/rest/users/list?name=${userIds.join(',')}`;
-  let users = await fetch(url, {
-    method: 'GET',
-    headers: { 'Authorization': 'Bearer ' + token }
-  });
-  users = await users.json();
+  let users = [];
+
+  for (let i = 0; i < userIds.length; i = i + 6) {
+    let userIdsPart = userIds.slice(i, i + 6);
+  	let url = `${DOMAIN}/rest/users/list?name=${userIdsPart.join(',')}`;
+    console.log(`url`, url);
+  	let usersPart = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + token }
+  	});
+    usersPart = await usersPart.json();
+    [].push.apply(users, usersPart);
+  }
+
+  console.log('users:', users);
   users.forEach(u => stats.users[u.userId].name = u.displayName);
 
   // Convert to array and sort
@@ -224,7 +233,7 @@ async function showStats(convId, parentItemId) {
     content += '</ol>';
   }
 
-  url = `${DOMAIN}/rest/conversations/${convId}/messages`;
+  let url = `${DOMAIN}/rest/conversations/${convId}/messages`;
   parentItemId && (url += `/${parentItemId}`);
 
   await fetch(url, {
